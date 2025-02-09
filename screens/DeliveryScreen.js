@@ -1,50 +1,68 @@
-
-import React, {useEffect, useRef, useState} from 'react';
-
+import React, {useEffect, useState} from 'react';
 import {
   Alert,
-  Button,
   FlatList,
   Modal,
   SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
   Text,
-  TextInput,
-  useColorScheme,
   View,
+  StyleSheet,
+  useColorScheme,
 } from 'react-native';
-
-import {
-  Colors,
-  DebugInstructions,
-  Header,
-  LearnMoreLinks,
-  ReloadInstructions,
-} from 'react-native/Libraries/NewAppScreen';
 import QRCodeScanner from 'react-native-qrcode-scanner';
-
-import {Dropdown} from 'react-native-element-dropdown';
 import axios from 'axios';
+import {
+  Button,
+  TextInput,
+  Dialog,
+  Portal,
+  List,
+  Divider,
+  Menu,
+  PaperProvider,
+  Caption,
+  Paragraph,
+  Subheading,
+  Title,
+  Headline,
+  DataTable,
+  useTheme,
+} from 'react-native-paper';
+import {Dropdown} from 'react-native-paper-dropdown';
 
 function DeliveryScreen() {
-  const isDarkMode = useColorScheme() === 'dark';
+  const colorScheme = useColorScheme();
+  const isDarkMode = colorScheme === 'dark';
+  const theme = useTheme(); // Get theme colors dynamically
   const [fileId, setFileId] = useState('');
   const [districts, setDistricts] = useState([]);
   const [selectedDistrict, setSelectedDistrict] = useState('');
   const [branches, setBranches] = useState([]);
   const [selectedBranch, setSelectedBranch] = useState('');
-  const [schoolCode, setSchoolCode] = useState('');
   const [userName, setUserName] = useState('');
   const [boxNo, setBoxNo] = useState('');
   const [boxes, setBoxes] = useState([]);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [manualEntry, setManualEntry] = useState(false);
   const [loading, setLoading] = useState(true);
-  const backgroundStyle = {
-    backgroundColor: isDarkMode ? Colors.darker : Colors.lighter,
+  const [schoolCode, setSchoolCode] = useState('');
+  const dropdownTheme = {
+    colors: {
+      primary: isDarkMode ? '#BB86FC' : '#6200EE', // Adjust the primary color
+      background: isDarkMode ? '#121212' : '#fff',
+      surface: isDarkMode ? '#121212' : '#fff',
+      text: isDarkMode ? '#fff' : '#000', // Ensures text is visible
+      placeholder: isDarkMode ? '#BBBBBB' : '#757575',
+    },
   };
+  const itemsPerPage = 5; // Set how many items to show per page
 
+  const [page, setPage] = useState(0);
+
+  // Calculate the start and end index of visible items
+  const startIndex = page * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const visibleData = boxes?.slice(startIndex, endIndex);
   useEffect(() => {
     // Fetch File ID on component mount
     const fetchFileId = async () => {
@@ -71,6 +89,8 @@ function DeliveryScreen() {
   }, []);
 
   const fetchDistricts = async fileId => {
+    setBranches([]);
+    setBoxes([]);
     try {
       const response = await axios.get(
         `http://116.72.230.95:99/api/MTMLP/Get_District?FileId=${fileId}`,
@@ -82,7 +102,13 @@ function DeliveryScreen() {
         },
       );
       if (response.data.Status === 302) {
-        setDistricts(response.data.Data);
+        setDistricts(
+          response.data.Data.map((district, index) => ({
+            label: district,
+            value: district, // Ensure value is unique
+            key: `district-${index}`, // Unique key
+          })),
+        );
       }
     } catch (error) {
       Alert.alert('Error', 'Failed to fetch districts.');
@@ -94,6 +120,8 @@ function DeliveryScreen() {
     }
   }, [selectedDistrict]);
   const fetchBranches = async () => {
+    setBoxes([]);
+    console.log('visibleData', boxes);
     if (!fileId || !selectedDistrict) {
       console.warn('File ID or selected district is missing');
       return;
@@ -110,7 +138,13 @@ function DeliveryScreen() {
         },
       );
       if (response.data.Status === 302) {
-        setBranches(response.data.Data);
+        setBranches(
+          response.data.Data.map((branch, index) => ({
+            label: branch.Branch, // Display name
+            value: branch.BranchCode, // Unique value
+            key: `branch-${index}`, // Unique key
+          })),
+        );
       }
     } catch (error) {
       console.error('Error fetching branches:', error);
@@ -122,6 +156,11 @@ function DeliveryScreen() {
       fetchBoxes(); // Call fetchBoxes whenever selectedBranch changes
     }
   }, [selectedBranch]);
+  useEffect(() => {
+    if (boxNo) {
+      validateDelivery(); // Call fetchBoxes whenever selectedBranch changes
+    }
+  }, [boxNo]);
   const fetchBoxes = async () => {
     if (!fileId || !selectedBranch) {
       console.warn('File ID or selected branch is missing');
@@ -147,292 +186,243 @@ function DeliveryScreen() {
       setLoading(false);
     }
   };
-
   const validateDelivery = async () => {
-    if (
-      !fileId ||
-      !selectedDistrict ||
-      !selectedBranch ||
-      !boxNo ||
-      !userName
-    ) {
+    if (!fileId || !selectedDistrict || !selectedBranch || !userName) {
       Alert.alert('Validation Error', 'Please fill in all fields.');
       return;
     }
 
+    const url = `http://116.72.230.95:99/api/MTMLP/VALIDATE_DELIVERY?FileId=${fileId}&District=${selectedDistrict}&BrachCode=${selectedBranch}&BOxNo=${boxNo}&UserName=${userName}`;
+    console.log('url', url);
+
     try {
-      const response = await axios.get(
-        `http://116.72.230.95:99/api/MTMLP/VALIDATE_DELIVERY?FileId=${fileId}&District=${selectedDistrict}&BrachCode=${selectedBranch}&BOxNo=${boxNo}&UserName=${userName}`,
-      );
-      if (response.data == 'SUCCESS') {
-        setSelectedDistrict('');
-        setSelectedBranch('');
+      const response = await axios.get(url);
+      console.log('response', response);
+
+      if (response.data.Data && response.data.Data.length > 0) {
+        const message = response.data.Data[0];
+
+        // Split the message by ',' and join with '\n' for new lines
+        const formattedMessage = message.split(',').join('\n');
+
+        if (message.includes('SUCCESS')) {
+          await fetchBoxes();
+          setSelectedDistrict('');
+          setSelectedBranch('');
+          setUserName('');
+          setBoxNo('');
+          Alert.alert('Success', formattedMessage);
+        } else {
+          Alert.alert(`Box No ${boxNo}`, formattedMessage);
+          setBoxNo('');
+        }
       } else {
-        Alert.alert('Success', response.data.Message);
+        Alert.alert('Error', 'Unexpected response format.');
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to validate delivery.');
+      Alert.alert('Error', `Failed to validate delivery. ${error.message}`);
     }
   };
 
   const onScanSuccess = e => {
     setBoxNo(e.data);
-    setIsScannerOpen(false);
-    validateDelivery();
-  };
-  const renderItem = ({item}) => {
-    // Conditionally apply background color based on "DeliveredOn"
-    const itemStyle = item.DeliveredOn
-      ? styles.deliveredItem
-      : styles.notDeliveredItem;
+    //Alert.alert('test', e.data);
+    // Alert.alert('test 1', boxNo);
 
-    return (
-      <View style={[styles.row, itemStyle]}>
-        <Text style={styles.cell}>{item.BoxNo}</Text>
-        <Text style={styles.cell}>{item.DeliveredOn || 'Not Delivered'}</Text>
-      </View>
-    );
+    //validateDelivery();
+    setIsScannerOpen(false);
   };
 
   return (
-    <SafeAreaView style={backgroundStyle}>
-      <StatusBar
-        barStyle={isDarkMode ? 'light-content' : 'dark-content'}
-        backgroundColor={backgroundStyle.backgroundColor}
-      />
-      <ScrollView
-        contentInsetAdjustmentBehavior="automatic"
-        style={backgroundStyle}>
-        {/*  <Header /> */}
-        <View
-          style={{
-            backgroundColor: isDarkMode ? Colors.black : Colors.white,
-          }}>
-          <Text style={styles.label}>File ID: {fileId}</Text>
-          <Text style={styles.label}>District:</Text>
+    <PaperProvider>
+      <SafeAreaView
+        style={[styles.container, isDarkMode && styles.darkContainer]}>
+        <Text variant="titleLarge" style={styles.title}>
+          Dilivery Screen
+        </Text>
+        <View style={styles.form}>
+          <Text style={{fontSize: 16, fontWeight: 'bold'}}>
+            File ID: {fileId}
+          </Text>
+
+          {/* District Dropdown */}
+
           <Dropdown
-            data={districts.map(district => ({
-              label: district,
-              value: district,
-            }))}
-            labelField="label"
-            valueField="value"
+            label="District"
             placeholder="Select District"
+            options={districts}
             value={selectedDistrict}
-            onChange={item => {
-              setSelectedDistrict(item.value);
-            }}
-            style={styles.dropdown}
+            onSelect={setSelectedDistrict}
+            theme={dropdownTheme}
+            style={{marginBottom: 15, paddingVertical: 5}} // Add spacing
           />
-          <Text style={styles.label}>School:</Text>
+
+          {/* Branch Dropdown */}
           <Dropdown
-            data={branches.map(branch => ({
-              label: branch.Branch,
-              value: branch.BranchCode, // Corrected
-            }))}
-            labelField="label"
-            valueField="value"
-            placeholder="Select School"
+            label="Branch"
+            placeholder="Select Branch"
+            options={branches}
             value={selectedBranch}
-            onChange={item => {
-              setSelectedBranch(item.value);
-              setSchoolCode(item.value);
-              //fetchBoxes();
-            }}
-            style={styles.dropdown}
+            onSelect={setSelectedBranch}
+            theme={dropdownTheme}
+            style={{marginBottom: 10, paddingVertical: 5}} // Add spacing
           />
 
-          <Text style={styles.label}>School Code: {schoolCode}</Text>
-
-          <Text style={styles.label}>Username:</Text>
+          <Text
+            style={{
+              fontSize: 16,
+              fontWeight: 'bold',
+              marginBottom: 10,
+              marginTop: 10,
+            }}>
+            School Code: {selectedBranch}
+          </Text>
           <TextInput
-            style={styles.input}
-            placeholder="Enter Username"
+            label="Enter Username"
             value={userName}
             onChangeText={setUserName}
-          />
-          <Text style={styles.label}>Box No:</Text>
-          <TextInput
+            mode="outlined"
             style={styles.input}
-            placeholder="Enter Box No"
-            value={boxNo}
-            onChangeText={setBoxNo}
           />
+          <Text style={{fontSize: 16, fontWeight: 'bold', marginBottom: 10}}>
+            Box No: {boxNo}
+          </Text>
           <Button
-            title="Scan & Submit"
-            onPress={() => setIsScannerOpen(true)}
-          />
-          <Modal
-            visible={isScannerOpen}
-            animationType="slide"
-            onBackdropPress={() => setIsScannerOpen(false)} // Close on outside press
-            style={styles.modal}>
-            <View style={styles.scannerContainer}>
-              <Text style={styles.modalTitle}>Scan QR Code</Text>
-              <QRCodeScanner
-                onRead={onScanSuccess}
-                showMarker={true} // Optional: Show marker rectangle
-                reactivate={true} // Optional: Allow multiple scans
-                reactivateTimeout={3000} // Optional: Time to wait before reactivating
-                topContent={
-                  <Text style={styles.instruction}>
-                    Align the QR code within the frame
-                  </Text>
-                }
-                bottomContent={
-                  <Button
-                    title="Cancel"
-                    onPress={() => setIsScannerOpen(false)}
-                  />
-                }
-              />
+            mode="contained"
+            style={{paddingTop: 5, marginTop: 10}} // Add marginTop for spacing
+            onPress={() => {
+              setBoxNo('');
+              setIsScannerOpen(true);
+            }}>
+            Scan & Submit
+          </Button>
+        </View>
+
+        <Portal>
+          <Modal visible={isScannerOpen} animationType="slide">
+            <View
+              style={[
+                styles.modalContainer,
+                isDarkMode && styles.darkContainer,
+              ]}>
+              {!manualEntry && (
+                <QRCodeScanner
+                  onRead={onScanSuccess}
+                  showMarker={true} // Optional: Show marker rectangle
+                  reactivate={true} // Optional: Allow multiple scans
+                  reactivateTimeout={3000} // Optional: Time to wait before reactivating
+                  topContent={
+                    <Text style={styles.instruction}>
+                      Align the QR code within the frame
+                    </Text>
+                  }
+                  bottomContent={
+                    <Button
+                      title="Cancel"
+                      onPress={() => setIsScannerOpen(false)}
+                    />
+                  }
+                />
+              )}
+              <Button onPress={() => setManualEntry(true)}>
+                Enter Box No Manually
+              </Button>
+              {manualEntry && (
+                <TextInput
+                  label="Enter Box No"
+                  value={boxNo}
+                  onChangeText={setBoxNo}
+                  mode="outlined"
+                  style={styles.input}
+                />
+              )}
+
+              <View style={styles.buttonContainer}>
+                {manualEntry && (
+                  <Button mode="contained" onPress={validateDelivery}>
+                    Submit
+                  </Button>
+                )}
+                <Button
+                  mode="outlined"
+                  onPress={() => {
+                    setManualEntry(true);
+                    setIsScannerOpen(false);
+                  }}>
+                  Cancel
+                </Button>
+              </View>
             </View>
           </Modal>
-          <View style={styles.tableContainer}>
-            {/* Table Header */}
-            <View style={styles.headerRow}>
-              <Text style={[styles.cell, styles.header]}>Box No</Text>
-              <Text style={[styles.cell, styles.header]}>Delivered On</Text>
-            </View>
+        </Portal>
 
-            {/* Scrollable Table Rows */}
-            <ScrollView style={styles.scrollableTable}>
-              <FlatList
-                data={boxes}
-                keyExtractor={item => item.BoxNo.toString()}
-                renderItem={renderItem}
-                ListEmptyComponent={<Text>No boxes available</Text>}
-                showsVerticalScrollIndicator={true}
-              />
-            </ScrollView>
-          </View>
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+        <DataTable>
+          {/* Table Header */}
+          <DataTable.Header>
+            <DataTable.Title>Box No</DataTable.Title>
+            <DataTable.Title>Status</DataTable.Title>
+          </DataTable.Header>
+
+          {/* Table Rows with Conditional Background */}
+          {visibleData.map(item => {
+            const isDelivered = !!item.DeliveredOn;
+            const backgroundColor = isDelivered
+              ? '#d4edda'
+              : theme.colors.background; // Green for delivered, theme background otherwise
+            const textColor = isDelivered ? '#000' : theme.colors.text; // Black on green, theme text otherwise
+
+            return (
+              <DataTable.Row
+                key={item.BoxNo.toString()}
+                style={{backgroundColor}}>
+                <DataTable.Cell textStyle={{color: textColor}}>
+                  {item.BoxNo}
+                </DataTable.Cell>
+                <DataTable.Cell textStyle={{color: textColor}}>
+                  {item.DeliveredOn || 'Not Delivered'}
+                </DataTable.Cell>
+              </DataTable.Row>
+            );
+          })}
+
+          {/* Pagination Controls */}
+          <DataTable.Pagination
+            page={page}
+            numberOfPages={Math.ceil(boxes.length / itemsPerPage)}
+            onPageChange={newPage => setPage(Math.max(0, newPage))} // Ensure page doesn't go negative
+            label={`${startIndex + 1}-${Math.min(endIndex, boxes.length)} of ${
+              boxes.length
+            }`}
+          />
+        </DataTable>
+      </SafeAreaView>
+    </PaperProvider>
   );
 }
 
 const styles = StyleSheet.create({
-  sectionContainer: {
-    marginTop: 32,
-    paddingHorizontal: 24,
-  },
-  sectionTitle: {
-    fontSize: 24,
-    fontWeight: '600',
-  },
-  sectionDescription: {
-    marginTop: 8,
-    fontSize: 18,
-    fontWeight: '400',
-  },
-  highlight: {
-    fontWeight: '700',
-  },
-  label: {
-    fontWeight: 'bold',
-    marginTop: 10,
-    marginLeft: 10,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ccc',
-    padding: 10,
-    marginHorizontal: 10,
-    marginTop: 5,
-    marginBottom: 10,
-    borderRadius: 5,
-    backgroundColor: '#f9f9f9',
-  },
-  dropdown: {
-    height: 50,
-    borderWidth: 1,
-    borderColor: 'gray',
-    borderRadius: 5,
-    marginVertical: 10,
-    marginHorizontal: 10,
-    paddingHorizontal: 10,
-  },
-  boxItem: {
-    padding: 10,
-    borderWidth: 1,
-    borderColor: '#ccc',
-    marginBottom: 5,
-    marginHorizontal: 10,
-    borderRadius: 5,
-    backgroundColor: '#f9f9f9',
-  },
-  camera: {
-    flex: 1,
-  },
-  modal: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)', // Dim background for focus
-  },
-  scannerContainer: {
-    backgroundColor: '#fff',
-    padding: 20,
-    borderRadius: 10,
-    width: '90%',
-    height: '80%',
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: 2},
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 10,
-    textAlign: 'center',
-  },
-  instruction: {
-    textAlign: 'center',
-    marginVertical: 10,
-    color: '#555',
-  },
   container: {
     flex: 1,
-    padding: 16,
-    backgroundColor: '#fff',
+    padding: 20,
+
+    backgroundColor: '#ffffff',
   },
-  tableContainer: {
-    height: 500, // Fixed height for the scrollable table
-  },
-  headerRow: {
-    flexDirection: 'row',
-    borderBottomWidth: 2,
-    borderBottomColor: '#000',
-    backgroundColor: '#f5f5f5',
-  },
-  row: {
-    flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderBottomColor: '#ccc',
-    paddingVertical: 10,
-  },
-  cell: {
-    flex: 1,
-    paddingHorizontal: 10,
-    fontSize: 16,
-    textAlign: 'left',
-  },
-  header: {
+  darkContainer: {flex: 1, padding: 20, backgroundColor: '#121212'},
+  label: {fontSize: 16, fontWeight: 'bold', marginBottom: 5},
+  title: {
+    fontSize: 24,
     fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 20,
   },
-  deliveredItem: {
-    backgroundColor: 'green', // Green background if DeliveredOn exists
+  darkText: {color: '#fff'},
+  input: {marginBottom: 10},
+  buttonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 20,
   },
-  notDeliveredItem: {
-    backgroundColor: 'white', // Default background if DeliveredOn is empty
-  },
-  scrollableTable: {
-    maxHeight: 200, // Fixed height for the scrollable table content
-  },
+  modalContainer: {flex: 1, justifyContent: 'center', padding: 20},
 });
 
 export default DeliveryScreen;
