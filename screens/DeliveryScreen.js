@@ -34,7 +34,8 @@ function DeliveryScreen() {
   const colorScheme = useColorScheme();
   const isDarkMode = colorScheme === 'dark';
   const theme = useTheme(); // Get theme colors dynamically
-  const [fileId, setFileId] = useState('');
+  const [fileIds, setFileIds] = useState('');
+  const [selectedFileId, setSelectedFFileId] = useState('');
   const [districts, setDistricts] = useState([]);
   const [selectedDistrict, setSelectedDistrict] = useState('');
   const [branches, setBranches] = useState([]);
@@ -77,8 +78,16 @@ function DeliveryScreen() {
           },
         );
         if (response.data.Status === 302) {
+          setFileIds(
+            response.data.Data.map((file, index) => ({
+              label: file,
+              value: file, // Ensure value is unique
+              key: `file-${index}`, // Unique key
+            })),
+          );
           const fetchedFileId = response.data.Data[0];
-          setFileId(fetchedFileId);
+          setSelectedFFileId(fetchedFileId);
+          // setFileId(fetchedFileId);
           fetchDistricts(fetchedFileId); // Fetch districts after file ID
         }
       } catch (error) {
@@ -86,14 +95,14 @@ function DeliveryScreen() {
       }
     };
     fetchFileId();
-  }, []);
+  }, [selectedFileId]);
 
   const fetchDistricts = async fileId => {
     setBranches([]);
     setBoxes([]);
     try {
       const response = await axios.get(
-        `http://116.72.230.95:99/api/MTMLP/Get_District?FileId=${fileId}`,
+        `http://116.72.230.95:99/api/MTMLP/Get_District?FileId=${selectedFileId}`,
         {
           headers: {
             'Content-Type': 'application/json',
@@ -129,7 +138,7 @@ function DeliveryScreen() {
 
     try {
       const response = await axios.get(
-        `http://116.72.230.95:99/api/MTMLP/Get_Branches?FileId=${fileId}&District=${selectedDistrict}`,
+        `http://116.72.230.95:99/api/MTMLP/Get_Branches?FileId=${selectedFileId}&District=${selectedDistrict}`,
         {
           headers: {
             'Content-Type': 'application/json',
@@ -169,7 +178,7 @@ function DeliveryScreen() {
 
     try {
       const response = await axios.get(
-        `http://116.72.230.95:99/api/MTMLP/GET_BOXES_FOR_BRANCH?FileId=${fileId}&District=${selectedDistrict}&BrachCode=${selectedBranch}`,
+        `http://116.72.230.95:99/api/MTMLP/GET_BOXES_FOR_BRANCH?FileId=${selectedFileId}&District=${selectedDistrict}&BrachCode=${selectedBranch}`,
         {
           headers: {
             'Content-Type': 'application/json',
@@ -192,7 +201,7 @@ function DeliveryScreen() {
       return;
     }
 
-    const url = `http://116.72.230.95:99/api/MTMLP/VALIDATE_DELIVERY?FileId=${fileId}&District=${selectedDistrict}&BrachCode=${selectedBranch}&BOxNo=${boxNo}&UserName=${userName}`;
+    const url = `http://116.72.230.95:99/api/MTMLP/VALIDATE_DELIVERY?FileId=${selectedFileId}&District=${selectedDistrict}&BrachCode=${selectedBranch}&BOxNo=${boxNo}&UserName=${userName}`;
     console.log('url', url);
 
     try {
@@ -242,8 +251,17 @@ function DeliveryScreen() {
         </Text>
         <View style={styles.form}>
           <Text style={{fontSize: 16, fontWeight: 'bold'}}>
-            File ID: {fileId}
+            File ID: {selectedFileId}
           </Text>
+          <Dropdown
+            label="file"
+            placeholder="Select field"
+            options={fileIds}
+            value={selectedFileId}
+            onSelect={setFileIds}
+            theme={dropdownTheme}
+            style={{marginBottom: 15, paddingVertical: 5}} // Add spacing
+          />
 
           {/* District Dropdown */}
 

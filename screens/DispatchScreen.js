@@ -33,11 +33,21 @@ function DispatchScreen() {
   const colorScheme = useColorScheme();
   const isDarkMode = colorScheme === 'dark';
   const [containerNumber, setContainerNumber] = useState('');
-  const [fileId, setFileId] = useState('');
+  const [fileIds, setFileIds] = useState('');
+  const [selectedFileId, setSelectedFFileId] = useState('');
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [boxNo, setBoxNo] = useState('');
   const [userName, setUserName] = useState('');
   const [manualEntry, setManualEntry] = useState(false);
+  const dropdownTheme = {
+    colors: {
+      primary: isDarkMode ? '#BB86FC' : '#6200EE', // Adjust the primary color
+      background: isDarkMode ? '#121212' : '#fff',
+      surface: isDarkMode ? '#121212' : '#fff',
+      text: isDarkMode ? '#fff' : '#000', // Ensures text is visible
+      placeholder: isDarkMode ? '#BBBBBB' : '#757575',
+    },
+  };
   useEffect(() => {
     const fetchFileId = async () => {
       try {
@@ -51,22 +61,29 @@ function DispatchScreen() {
           },
         );
         if (response.data.Status === 302) {
-          const fetchedFileId = response.data.Data[0];
-          setFileId(fetchedFileId);
+          // const fetchedFileId = response.data.Data[0];
+          //   setFileId(fetchedFileId);
+          setFileIds(
+            response.data.Data.map((file, index) => ({
+              label: file,
+              value: file, // Ensure value is unique
+              key: `file-${index}`, // Unique key
+            })),
+          );
         }
       } catch (error) {
         Alert.alert('Error', 'Failed to fetch File ID.');
       }
     };
     fetchFileId();
-  }, []);
+  }, [selectedFileId]);
 
   const validateDispatch = async () => {
     if (!fileId || !containerNumber) {
       Alert.alert('Validation Error', 'Please fill in all fields.');
       return;
     }
-    const url = `http://116.72.230.95:99/api/MTMLP/VALIDATE_DESPATCH?FileId=${fileId}&Containerno=${containerNumber}&BOxNo=${boxNo}&UserName=${userName}`;
+    const url = `http://116.72.230.95:99/api/MTMLP/VALIDATE_DESPATCH?FileId=${selectedFileId}&Containerno=${containerNumber}&BOxNo=${boxNo}&UserName=${userName}`;
     console.log('url', url);
 
     try {
@@ -114,10 +131,16 @@ function DispatchScreen() {
           <Text variant="titleLarge" style={styles.title}>
             Dispatch Screen
           </Text>
-          <Text variant="bodyMedium" style={styles.label}>
-            File ID: {fileId}
-          </Text>
-
+          
+          <Dropdown
+            label="file"
+            placeholder="Select field"
+            options={fileIds}
+            value={selectedFileId}
+            onSelect={setFileIds}
+            theme={dropdownTheme}
+            style={{marginBottom: 15, paddingVertical: 5}} // Add spacing
+          />
           <TextInput
             label="Container Number"
             mode="outlined"
