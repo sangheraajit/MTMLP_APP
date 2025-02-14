@@ -6,6 +6,24 @@
  */
 
 import React from 'react';
+
+import {
+  Provider as PaperProvider,
+  MD3DarkTheme,
+  MD3LightTheme,
+  adaptNavigationTheme,
+} from 'react-native-paper';
+import {NavigationContainer} from '@react-navigation/native';
+import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+
+import DeliveryScreen from './screens/DeliveryScreen';
+import DispatchScreen from './screens/DispatchScreen';
+
+const Tab = createBottomTabNavigator();
+
+// Adapt themes for NavigationContainer from react-native-paper
+
 import type {PropsWithChildren} from 'react';
 import {
   SafeAreaView,
@@ -54,45 +72,45 @@ function Section({children, title}: SectionProps): React.JSX.Element {
     </View>
   );
 }
-
+const {LightTheme, DarkTheme} = adaptNavigationTheme({
+  reactNavigationLight: MD3LightTheme,
+  reactNavigationDark: MD3DarkTheme,
+});
 function App(): React.JSX.Element {
   const isDarkMode = useColorScheme() === 'dark';
-
+  const scheme = useColorScheme(); // Detect system theme
+  const theme = scheme === 'dark' ? DarkTheme : LightTheme; // Auto apply theme
+  
   const backgroundStyle = {
     backgroundColor: isDarkMode ? Colors.darker : Colors.lighter,
   };
 
   return (
-    <SafeAreaView style={backgroundStyle}>
+    <PaperProvider theme={theme}>
+    <NavigationContainer theme={theme}>
       <StatusBar
-        barStyle={isDarkMode ? 'light-content' : 'dark-content'}
-        backgroundColor={backgroundStyle.backgroundColor}
+        barStyle={scheme === 'dark' ? 'light-content' : 'dark-content'}
+        backgroundColor={theme.colors.background}
       />
-      <ScrollView
-        contentInsetAdjustmentBehavior="automatic"
-        style={backgroundStyle}>
-        <Header />
-        <View
-          style={{
-            backgroundColor: isDarkMode ? Colors.black : Colors.white,
-          }}>
-          <Section title="Step One">
-            Edit <Text style={styles.highlight}>App.tsx</Text> to change this
-            screen and then come back to see your edits.
-          </Section>
-          <Section title="See Your Changes">
-            <ReloadInstructions />
-          </Section>
-          <Section title="Debug">
-            <DebugInstructions />
-          </Section>
-          <Section title="Learn More">
-            Read the docs to discover what to do next:
-          </Section>
-          <LearnMoreLinks />
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+
+      <Tab.Navigator
+        initialRouteName="Delivery"
+        screenOptions={({route}) => ({
+          tabBarIcon: ({color, size}) => {
+            let iconName =
+              route.name === 'Delivery' ? 'home-outline' : 'list-outline';
+            return <Ionicons name={iconName} size={size} color={color} />;
+          },
+          tabBarActiveTintColor: theme.colors.primary,
+          tabBarInactiveTintColor: theme.colors.onSurfaceVariant,
+          headerStyle: {backgroundColor: theme.colors.background},
+          headerTintColor: theme.colors.onBackground,
+        })}>
+        <Tab.Screen name="Delivery" component={DeliveryScreen} />
+        <Tab.Screen name="Dispatch" component={DispatchScreen} />
+      </Tab.Navigator>
+    </NavigationContainer>
+  </PaperProvider>
   );
 }
 
