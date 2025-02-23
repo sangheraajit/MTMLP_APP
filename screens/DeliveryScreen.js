@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Alert,
   FlatList,
@@ -8,6 +8,7 @@ import {
   View,
   StyleSheet,
   useColorScheme,
+  PermissionsAndroid
 } from 'react-native';
 import QRCodeScanner from 'react-native-qrcode-scanner';
 import axios from 'axios';
@@ -28,12 +29,20 @@ import {
   DataTable,
   useTheme,
 } from 'react-native-paper';
-import {Dropdown} from 'react-native-paper-dropdown';
-
+import { Dropdown } from 'react-native-paper-dropdown';
+import { Dropdown as NewDropdown } from "react-native-element-dropdown";
+import SearchableDropdown from '../components/SearchableDropdown';
+import BoxTable from '../components/BoxTable';
 function DeliveryScreen() {
   const colorScheme = useColorScheme();
-  const isDarkMode = colorScheme === 'dark';
+
+  // Dark Mode Styles
+  const isDarkMode = colorScheme === "dark";
+  const backgroundColor = isDarkMode ? "#222" : "#fff";
+  const textColor = isDarkMode ? "#fff" : "#000";
+  const borderColor = isFocus ? (isDarkMode ? "#66b2ff" : "blue") : (isDarkMode ? "#555" : "gray");
   const theme = useTheme(); // Get theme colors dynamically
+  const [labels, setLabels] = useState([]);
   const [fileIds, setFileIds] = useState([]);
   const [selectedFileId, setSelectedFileId] = useState();
   const [districts, setDistricts] = useState([]);
@@ -47,6 +56,8 @@ function DeliveryScreen() {
   const [manualEntry, setManualEntry] = useState(false);
   const [loading, setLoading] = useState(true);
   const [schoolCode, setSchoolCode] = useState('');
+  const [gridColumns, setGridColumns] = useState([]);
+  const [isFocus, setIsFocus] = useState(false);
   const dropdownTheme = {
     colors: {
       primary: isDarkMode ? '#BB86FC' : '#6200EE', // Adjust the primary color
@@ -64,6 +75,69 @@ function DeliveryScreen() {
   const startIndex = page * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
   const visibleData = boxes?.slice(startIndex, endIndex);
+  const [simCards, setSimCards] = useState([]);
+  useEffect(() => {
+    const getSimDetails = async () => {
+      if (Platform.OS === 'android') {
+        try {
+          const granted = await PermissionsAndroid.request(
+            PermissionsAndroid.PERMISSIONS.READ_PHONE_STATE
+          );
+
+          if (granted === PermissionsAndroid.RESULTS.GRANTED) {
+            const simData = await SimCardsManager.getSimCards();
+            if (simData.length > 0) {
+              setSimCards(simData);
+              setUserName(simData[0].phoneNumber || 'Number Not Available');
+            } else {
+              Alert.alert('No SIM cards detected');
+            }
+          } else {
+            Alert.alert('Permission Denied', 'Cannot access SIM data.');
+          }
+        } catch (error) {
+          console.error('Error fetching SIM info:', error);
+        }
+      } else {
+        Alert.alert('Not supported on iOS');
+      }
+    };
+
+    //getSimDetails();
+  }, []);
+
+  useEffect(() => {
+    const fetchLabels = async () => {
+      try {
+        const response = await axios.get(
+          'http://116.72.230.95:99/api/MTMLP/Get_Labels',
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              Accept: 'application/json',
+            },
+          },
+        );
+
+        if (response.data.Status === 302) {
+          console.log("fetchLabels response", response.data);
+
+
+
+          setLabels(response.data.Data);
+          console.log("fetchLabels label", response.data.Data);
+
+
+        }
+      } catch (error) {
+        console.error('Failed to fetch label', error);
+        Alert.alert('Error', 'Failed to fetch label.');
+      }
+    };
+
+    fetchLabels();
+  }, []);
+
   useEffect(() => {
     const fetchFileId = async () => {
       try {
@@ -101,9 +175,9 @@ function DeliveryScreen() {
 
     fetchFileId();
   }, []);
-  
 
-  const fetchDistricts = async fileId => {
+
+  const fetchDistricts = async () => {
     setDistricts([]);
     setBranches([]);
     setBoxes([]);
@@ -135,7 +209,9 @@ function DeliveryScreen() {
       fetchDistricts(selectedFileId);
     }
   }, [selectedFileId]);
-  
+
+
+
   useEffect(() => {
     if (selectedDistrict) {
       fetchBranches(selectedFileId, selectedDistrict);
@@ -191,8 +267,9 @@ function DeliveryScreen() {
     }
 
     try {
-      const response = await axios.get(
-        `http://116.72.230.95:99/api/MTMLP/GET_BOXES_FOR_BRANCH?FileId=${selectedFileId}&District=${selectedDistrict}&BrachCode=${selectedBranch}`,
+      const url = `http://116.72.230.95:99/api/MTMLP/GET_BOXES_FOR_BRANCH?FileId=${selectedFileId}&District=${selectedDistrict}&BrachCode=${selectedBranch}`
+      console.log("fetchBoxes url", url);
+      const response = await axios.get(url,
         {
           headers: {
             'Content-Type': 'application/json',
@@ -201,7 +278,9 @@ function DeliveryScreen() {
         },
       );
       if (response.data.Status === 302) {
-        setBoxes(response.data.Data);
+        console.log("fetchBoxes", response.data);
+        setGridColumns(response.data.Data.Columns)
+        setBoxes(response.data.Data.GridData);
       }
     } catch (error) {
       console.error('Error fetching boxes:', error);
@@ -210,9 +289,12 @@ function DeliveryScreen() {
     }
   };
   const validateDelivery = async () => {
-    if (!selectedFileId || !selectedDistrict || !selectedBranch || !userName) {
+    if (!selectedFileId || !selectedDistrict || !selectedBranch) {
       Alert.alert('Validation Error', 'Please fill in all fields.');
       return;
+    }
+    if (!userName) {
+      setUserName('')
     }
 
     const url = `http://116.72.230.95:99/api/MTMLP/VALIDATE_DELIVERY?FileId=${selectedFileId}&District=${selectedDistrict}&BrachCode=${selectedBranch}&BOxNo=${boxNo}&UserName=${userName}`;
@@ -230,10 +312,15 @@ function DeliveryScreen() {
 
         if (message.includes('SUCCESS')) {
           await fetchBoxes();
-          setSelectedDistrict('');
-          setSelectedBranch('');
-          setUserName('');
-          setBoxNo('');
+          // Check if all boxes are delivered (DeliveredOn is NOT null for all)
+          const allDelivered = boxes.every(box => box.DeliveredOn !== null);
+
+          /*   if (allDelivered) {
+              setSelectedDistrict('');
+              setSelectedBranch('');
+              setUserName('');
+              setBoxNo('');
+            } */
           Alert.alert('Success', formattedMessage);
         } else {
           Alert.alert(`Box No ${boxNo}`, formattedMessage);
@@ -255,49 +342,61 @@ function DeliveryScreen() {
     //validateDelivery();
     setIsScannerOpen(false);
   };
-
+  const onManualSubmit = async () => {
+    setManualEntry(false)
+    validateDelivery();
+  }
+  const renderItem = (item, selectedValue) => {
+    return (
+      <View style={styles.item}>
+        <Text style={styles.textItem}>{item.label}</Text>
+        {item.value === value && (
+          <AntDesign
+            style={styles.icon}
+            color="black"
+            name="Safety"
+            size={20}
+          />
+        )}
+      </View>
+    );
+  };
   return (
     <PaperProvider>
       <SafeAreaView
         style={[styles.container, isDarkMode && styles.darkContainer]}>
         <Text variant="titleLarge" style={styles.title}>
-        Delivery Screen
+          {labels.ScreenHeading}
         </Text>
         <View style={styles.form}>
-          
-     
-         
+
+
+
           {/* District Dropdown */}
-          <Dropdown
-            label="File ID"
-            
-            placeholder="Select File ID"
-            options={fileIds ?? []} // Fallback to empty array
-            value={selectedFileId}
-            onSelect={setSelectedFileId}
-            theme={dropdownTheme}
-            style={{marginBottom: 15, paddingVertical: 5}} // Add spacing
-          /> 
-          <Dropdown
-            label="District"
-            placeholder="Select District"
-            options={districts}
-            value={selectedDistrict}
-            onSelect={setSelectedDistrict}
-            theme={dropdownTheme}
-            style={{marginBottom: 15, paddingVertical: 5}} // Add spacing
+
+
+          <SearchableDropdown
+            label={`${labels.Dropdown1}`}
+            options={fileIds ?? []} // Pass the correct data array
+            selectedValue={selectedFileId}
+            setSelectedValue={setSelectedFileId}
+          />
+
+          <SearchableDropdown
+            label={`${labels.Dropdown2}`}
+            options={districts ?? []} // Pass the correct data array
+            selectedValue={selectedDistrict}
+            setSelectedValue={setSelectedDistrict}
+          />
+          <SearchableDropdown
+            label={`${labels.Dropdown3}`}
+            options={branches ?? []} // Pass the correct data array
+            selectedValue={selectedBranch}
+            setSelectedValue={setSelectedBranch}
           />
 
           {/* Branch Dropdown */}
-          <Dropdown
-            label="Branch"
-            placeholder="Select Branch"
-            options={branches}
-            value={selectedBranch}
-            onSelect={setSelectedBranch}
-            theme={dropdownTheme}
-            style={{marginBottom: 10, paddingVertical: 5}} // Add spacing
-          />
+
 
           <Text
             style={{
@@ -306,21 +405,21 @@ function DeliveryScreen() {
               marginBottom: 10,
               marginTop: 10,
             }}>
-            School Code: {selectedBranch}
+            {labels.LabelText1}: {selectedBranch}
           </Text>
           <TextInput
-            label="Enter Username"
+            label={labels.Textbox_Label}
             value={userName}
             onChangeText={setUserName}
             mode="outlined"
             style={styles.input}
           />
-          <Text style={{fontSize: 16, fontWeight: 'bold', marginBottom: 10}}>
-            Box No: {boxNo}
+          <Text style={{ fontSize: 16, fontWeight: 'bold', marginBottom: 10 }}>
+            {labels.LabelText2}: {boxNo}
           </Text>
           <Button
             mode="contained"
-            style={{paddingTop: 5, marginTop: 10}} // Add marginTop for spacing
+            style={{ paddingTop: 5, marginTop: 10 }} // Add marginTop for spacing
             onPress={() => {
               setBoxNo('');
               setIsScannerOpen(true);
@@ -328,7 +427,13 @@ function DeliveryScreen() {
             Scan & Submit
           </Button>
         </View>
-
+        <View style={{ flex: 1, width: "100%", minWidth: "100%" }}>
+          <BoxTable
+            selectedFileId={selectedFileId}
+            selectedDistrict={selectedDistrict}
+            selectedBranch={selectedBranch}
+          />
+        </View>
         <Portal>
           <Modal visible={isScannerOpen} animationType="slide">
             <View
@@ -371,14 +476,14 @@ function DeliveryScreen() {
 
               <View style={styles.buttonContainer}>
                 {manualEntry && (
-                  <Button mode="contained" onPress={validateDelivery}>
+                  <Button mode="contained" onPress={onManualSubmit}>
                     Submit
                   </Button>
                 )}
                 <Button
                   mode="outlined"
                   onPress={() => {
-                    setManualEntry(true);
+                    setManualEntry(false);
                     setIsScannerOpen(false);
                   }}>
                   Cancel
@@ -388,45 +493,7 @@ function DeliveryScreen() {
           </Modal>
         </Portal>
 
-        <DataTable>
-          {/* Table Header */}
-          <DataTable.Header>
-            <DataTable.Title>Box No</DataTable.Title>
-            <DataTable.Title>Status</DataTable.Title>
-          </DataTable.Header>
 
-          {/* Table Rows with Conditional Background */}
-          {visibleData.map(item => {
-            const isDelivered = !!item.DeliveredOn;
-            const backgroundColor = isDelivered
-              ? '#d4edda'
-              : theme.colors.background; // Green for delivered, theme background otherwise
-            const textColor = isDelivered ? '#000' : theme.colors.text; // Black on green, theme text otherwise
-
-            return (
-              <DataTable.Row
-                key={item.BoxNo.toString()}
-                style={{backgroundColor}}>
-                <DataTable.Cell textStyle={{color: textColor}}>
-                  {item.BoxNo}
-                </DataTable.Cell>
-                <DataTable.Cell textStyle={{color: textColor}}>
-                  {item.DeliveredOn || 'Not Delivered'}
-                </DataTable.Cell>
-              </DataTable.Row>
-            );
-          })}
-
-          {/* Pagination Controls */}
-          <DataTable.Pagination
-            page={page}
-            numberOfPages={Math.ceil(boxes.length / itemsPerPage)}
-            onPageChange={newPage => setPage(Math.max(0, newPage))} // Ensure page doesn't go negative
-            label={`${startIndex + 1}-${Math.min(endIndex, boxes.length)} of ${
-              boxes.length
-            }`}
-          />
-        </DataTable>
       </SafeAreaView>
     </PaperProvider>
   );
@@ -435,26 +502,43 @@ function DeliveryScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 20,
-
+    padding: 10,
     backgroundColor: '#ffffff',
   },
-  darkContainer: {flex: 1, padding: 20, backgroundColor: '#121212'},
-  label: {fontSize: 16, fontWeight: 'bold', marginBottom: 5},
+  darkContainer: { flex: 1, padding: 20, backgroundColor: '#121212' },
+  label: { fontSize: 16, fontWeight: 'bold', marginBottom: 5 },
   title: {
-    fontSize: 24,
+    fontSize: 18,
     fontWeight: 'bold',
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: 0,
   },
-  darkText: {color: '#fff'},
-  input: {marginBottom: 10},
+  darkText: { color: '#fff' },
+  input: { marginBottom: 10 },
   buttonContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginTop: 20,
   },
-  modalContainer: {flex: 1, justifyContent: 'center', padding: 20},
+  modalContainer: { flex: 1, justifyContent: 'center', padding: 20 },
+  dropdown: {
+    height: 50,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+  },
+  placeholderStyle: {
+    fontSize: 16,
+  },
+  selectedTextStyle: {
+    fontSize: 16,
+  },
+  inputSearchStyle: {
+    height: 40,
+    fontSize: 16,
+    borderRadius: 5,
+    paddingHorizontal: 8,
+  },
 });
 
 export default DeliveryScreen;

@@ -105,9 +105,9 @@ function DispatchScreen() {
         const formattedMessage = message.split(',').join('\n');
 
         if (message.includes('SUCCESS')) {
-          setContainerNumber('');
-          setBoxNo('');
-          setUserName('');
+          //setContainerNumber('');
+          //setBoxNo('');
+          //setUserName('');
           Alert.alert('Success', formattedMessage);
         } else {
           Alert.alert(`Box No ${boxNo}`, formattedMessage);
@@ -131,6 +131,10 @@ function DispatchScreen() {
       validateDispatch(); // Call fetchBoxes whenever selectedBranch changes
     }
   }, [boxNo]);
+  const onManualSubmit = async () => {
+    setManualEntry(false)
+    validateDispatch();
+  }
   return (
     <PaperProvider>
       <SafeAreaView
@@ -171,7 +175,8 @@ function DispatchScreen() {
           <Button
             mode="contained"
             onPress={() => setIsScannerOpen(true)}
-            style={styles.button}>
+            style={{paddingTop: 5, marginTop: 10}}
+            >
             Scan & Submit
           </Button>
 
@@ -217,14 +222,14 @@ function DispatchScreen() {
 
                 <View style={styles.buttonContainer}>
                   {manualEntry && (
-                    <Button mode="contained" onPress={validateDispatch}>
+                    <Button mode="contained" onPress={onManualSubmit}>
                       Submit
                     </Button>
                   )}
                   <Button
                     mode="outlined"
                     onPress={() => {
-                      setManualEntry(true);
+                      setManualEntry(false);
                       setIsScannerOpen(false);
                     }}>
                     Cancel
@@ -240,10 +245,11 @@ function DispatchScreen() {
 }
 
 const styles = StyleSheet.create({
-  ontainer: {
+  
+  container: {
     flex: 1,
-    padding: 20,
-    justifyContent: 'center',
+    padding: 10,
+
     backgroundColor: '#ffffff',
   },
   darkContainer: {
